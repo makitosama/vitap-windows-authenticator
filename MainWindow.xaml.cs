@@ -32,8 +32,7 @@ namespace VitapAuthenticator
                 if (success)
                 {
                     StatusTextBlock.Text = "Authentication successful!";
-                    statusTextBlock.Foreground = System.Windows.Media.Brushes.Green;
-                    sessionManager.StartKeepAlive();
+                    StatusTextBlock.Foreground = System.Windows.Media.Brushes.Green;                    sessionManager.StartKeepAlive();
                 }
                 else
                 {
