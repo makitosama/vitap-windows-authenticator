@@ -5,13 +5,10 @@ namespace VitapAuthenticator
 {
     public partial class App : Application
     {
-        public App()
+        protected override void OnStartup(StartupEventArgs e)
         {
-            InitializeComponent();
-        }
-
-        private void Application_Startup(object sender, StartupEventArgs e)
-        {
+            base.OnStartup(e);
+            
             MainWindow mainWindow = new MainWindow();
             mainWindow.Show();
         }
