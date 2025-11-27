@@ -14,9 +14,7 @@ namespace VitapAuthenticator
         private const int VITAP_PORT = 8090;
         private static readonly string VITAP_BASE_URL = "http://" + VITAP_HOST + ":" + VITAP_PORT;
         private static readonly RestClientOptions options = new RestClientOptions(VITAP_BASE_URL)
-        {
-            MaxTimeout = TimeSpan.FromSeconds(10)
-        };
+                };
         private static readonly RestClient client = new RestClient(options);
         private readonly System.Net.CookieContainer cookieContainer = new System.Net.CookieContainer();
 
