@@ -1,4 +1,4 @@
-LoggingService.csusing System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Controls;
 
@@ -35,7 +35,6 @@ namespace VitapAuthenticator
             {
                 logBuffer.Add(logEntry);
 
-                // Keep only last 1000 lines
                 if (logBuffer.Count > MAX_LOG_LINES)
                 {
                     logBuffer.RemoveRange(0, logBuffer.Count - MAX_LOG_LINES);
@@ -53,12 +52,10 @@ namespace VitapAuthenticator
                     }
                     catch
                     {
-                        // Silently handle any UI thread issues
                     }
                 }
             }
 
-            // Also log to debug output
             System.Diagnostics.Debug.WriteLine(logEntry);
         }
 
@@ -69,17 +66,17 @@ namespace VitapAuthenticator
 
         public static void LogSuccess(string message)
         {
-            Log($"[SUCCESS] ✓ {message}");
+            Log($"[SUCCESS] {message}");
         }
 
         public static void LogWarning(string message)
         {
-            Log($"[WARNING] ⚠ {message}");
+            Log($"[WARNING] {message}");
         }
 
         public static void LogInfo(string message)
         {
-            Log($"[INFO] → {message}");
+            Log($"[INFO] {message}");
         }
 
         public static void LogStep(int step, string message)
@@ -117,7 +114,6 @@ namespace VitapAuthenticator
                     }
                     catch
                     {
-                        // Silently handle any UI thread issues
                     }
                 }
             }
