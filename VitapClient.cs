@@ -18,7 +18,7 @@ namespace VitapAuthenticator
             MaxTimeout = TimeSpan.FromSeconds(10)
         };
         private static readonly RestClient client = new RestClient(options);
-        private readonly CookieContainer cookieContainer = new System.Net.CookieContainer();
+        private readonly System.Net.CookieContainer cookieContainer = new System.Net.CookieContainer();
 
         public async Task<bool> AuthenticateAsync(string username, string password)
         {
@@ -125,13 +125,12 @@ namespace VitapAuthenticator
 
             try
             {
-                // Try multiple patterns to find CSRF token
-                var patterns = new[]
+                var patterns = new string[]
                 {
-                    @"name=[\"']csrf_token[\"']\s+value=[\"']([a-zA-Z0-9]+)[\"']",
-                    @"csrf_token[\"'][\s:=]+[\"']([a-zA-Z0-9]+)[\"']",
-                    @"<input[^>]*name=[\"']csrf_token[\"'][^>]*value=[\"']([^\"']*)[\"'][^>]*>",
-                    @"csrf[\"'][\s:=]+[\"']([a-zA-Z0-9]+)[\"']"
+                    "name=\"csrf_token\"\\s+value=\"([a-zA-Z0-9]+)\"",
+                    "csrf_token[\"'][\\s:=]+[\"']([a-zA-Z0-9]+)[\"']",
+                    "<input[^>]*name=\"csrf_token\"[^>]*value=\"([^\"]*)\"",
+                    "csrf[\"'][\\s:=]+[\"']([a-zA-Z0-9]+)[\"']"
                 };
 
                 foreach (var pattern in patterns)
@@ -159,13 +158,12 @@ namespace VitapAuthenticator
 
             try
             {
-                // Look for common error message patterns
-                var patterns = new[]
+                var patterns = new string[]
                 {
-                    @"<div[^>]*class=[\"']error[\"'][^>]*>([^<]*)</div>",
-                    @"<span[^>]*class=[\"']error[\"'][^>]*>([^<]*)</span>",
-                    @"error[\"'][\s:=]+[\"']([^\"']*)[\"']",
-                    @"message[\"'][\s:=]+[\"']([^\"']*)[\"']"
+                    "<div[^>]*class=\"error\"[^>]*>([^<]*)</div>",
+                    "<span[^>]*class=\"error\"[^>]*>([^<]*)</span>",
+                    "error[\"'][\\s:=]+[\"']([^\"']*)[\"']",
+                    "message[\"'][\\s:=]+[\"']([^\"']*)[\"']"
                 };
 
                 foreach (var pattern in patterns)
