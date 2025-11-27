@@ -10,8 +10,7 @@ namespace VitapAuthenticator
         private readonly HttpClient httpClient = new HttpClient();
         private const string VITAP_HOST = "172.18.10.10";
         private const int VITAP_PORT = 8090;
-        private const string VITAP_BASE_URL = $"http://{VITAP_HOST}:{VITAP_PORT}";
-        private const int KEEP_ALIVE_INTERVAL_MS = 300000; // 5 minutes
+        private static readonly string VITAP_BASE_URL = "http://" + VITAP_HOST + ":" + VITAP_PORT;        private const int KEEP_ALIVE_INTERVAL_MS = 300000; // 5 minutes
         private const int SESSION_TIMEOUT_MS = 1800000; // 30 minutes
 
         private Timer keepAliveTimer;
