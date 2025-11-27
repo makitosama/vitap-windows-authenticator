@@ -1,72 +1,57 @@
 using System;
-using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
-using System.Threading.Tasks;
 using System.Text.RegularExpressions;
-using RestSharp;
-using Newtonsoft.Json;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace VitapAuthenticator
 {
     public class VitapClient
     {
-        // Configuration constants
-private const string VITAP_HOST = "172.18.10.10";    
-private const int VITAP_PORT = 8090;
-        private static readonly string VITAP_BASE_URL = "http://" + VITAP_HOST + ":" + VITAP_PORT;
-        private static readonly RestClientOptions options = new RestClientOptions(VITAP_BASE_URL)        {
-            FollowRedirects = true,
-            MaxRedirects = 5,
-            ThrowOnAnyError = false,
-            ThrowOnDeserializationError = false
+        private const string VITAP_HOST = "172.18.10.10";
+        private const int VITAP_PORT = 1000;
+        private static readonly string VITAP_BASE_URL = $"https://{VITAP_HOST}:{VITAP_PORT}";
+        private static readonly HttpClientHandler handler = new HttpClientHandler()
+        {
+            ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
         };
-        private static readonly RestClient client = new RestClient(options);
-        private readonly System.Net.CookieContainer cookieContainer = new System.Net.CookieContainer();
+        private static readonly HttpClient client = new HttpClient(handler);
+
+        public VitapClient()
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11;
+            ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+        }
 
         public async Task<bool> AuthenticateAsync(string username, string password)
         {
             try
             {
-                LoggingService.Log("=== VIT-AP Authentication Workflow Started ===");
+                LoggingService.Log("=== VIT-AP Campus WiFi Authentication Started ===");
                 LoggingService.LogInfo($"Username: {username}");
                 LoggingService.LogInfo($"Target: {VITAP_BASE_URL}");
                 LoggingService.LogInfo($"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
 
-                LoggingService.LogStep(1, "Fetching login page to extract CSRF token...");
-                var loginPageContent = await GetLoginPageContentAsync();
+                // Step 1: Fetch magic token
+                LoggingService.LogStep(1, "Fetching magic token from login page...");
+                string magic = await FetchMagicTokenAsync();
                 
-                if (string.IsNullOrEmpty(loginPageContent))
+                if (string.IsNullOrEmpty(magic))
                 {
-                    LoggingService.LogError("FAILED: Login page content is empty!");
-                    LoggingService.LogWarning("Possible causes: Portal unreachable, network timeout, or invalid response");
+                    LoggingService.LogError("FAILED: Could not extract magic token");
+                    LoggingService.LogWarning("Portal may be unreachable or token format changed");
                     return false;
                 }
 
-                LoggingService.LogSuccess($"Login page fetched successfully ({loginPageContent.Length} bytes)");
+                LoggingService.LogSuccess($"Magic token extracted: {magic}");
 
-                LoggingService.LogStep(2, "Extracting CSRF token from login page...");
-                var csrfToken = ExtractCsrfToken(loginPageContent);
-                
-                if (string.IsNullOrEmpty(csrfToken))
-                {
-                    LoggingService.LogError("FAILED: Could not extract CSRF token from response!");
-                    LoggingService.LogWarning($"Page snippet: {loginPageContent.Substring(0, Math.Min(300, loginPageContent.Length))}");
-                    return false;
-                }
+                // Step 2: Submit login with magic token
+                LoggingService.LogStep(2, "Submitting authentication with credentials and magic token...");
+                bool success = await SubmitLoginAsync(username, password, magic);
 
-                LoggingService.LogSuccess($"CSRF token extracted: {csrfToken}");
-
-                LoggingService.LogStep(3, "Submitting login credentials...");
-                LoggingService.LogInfo($"Parameters: username={username}, csrf_token={csrfToken}");
-                
-                var loginResponse = await SubmitLoginAsync(username, password, csrfToken);
-                
-                LoggingService.LogInfo($"HTTP Response Status: {loginResponse.StatusCode}");
-                LoggingService.LogInfo($"Response Size: {(loginResponse.Content?.Length ?? 0)} bytes");
-                
-                bool isSuccessful = CheckAuthenticationSuccess(loginResponse);
-                
-                if (isSuccessful)
+                if (success)
                 {
                     LoggingService.Log("");
                     LoggingService.LogSuccess("=== AUTHENTICATION SUCCESSFUL ===");
@@ -75,11 +60,9 @@ private const int VITAP_PORT = 8090;
                 }
                 else
                 {
-                    string errorMsg = ExtractErrorMessage(loginResponse.Content ?? string.Empty);
                     LoggingService.Log("");
-                    LoggingService.LogError($"=== AUTHENTICATION FAILED ===");
-                    LoggingService.LogError($"Error: {errorMsg}");
-                    LoggingService.LogWarning($"Response content: {loginResponse.Content}");
+                    LoggingService.LogError("=== AUTHENTICATION FAILED ===");
+                    LoggingService.LogWarning("Check username and password");
                     LoggingService.Log("");
                     return false;
                 }
@@ -88,196 +71,100 @@ private const int VITAP_PORT = 8090;
             {
                 LoggingService.Log("");
                 LoggingService.LogError($"=== AUTHENTICATION EXCEPTION ===");
-                LoggingService.LogError($"Exception Type: {ex.GetType().Name}");
-                LoggingService.LogError($"Message: {ex.Message}");
+                LoggingService.LogError($"Exception: {ex.Message}");
                 LoggingService.LogWarning($"StackTrace: {ex.StackTrace}");
                 LoggingService.Log("");
                 return false;
             }
         }
 
-        private async Task<string> GetLoginPageContentAsync()
+        private async Task<string> FetchMagicTokenAsync()
         {
             try
             {
-                LoggingService.LogHttpRequest("GET", "/hotspot/login");
-                var request = new RestRequest("/hotspot/login", Method.Get);
-                request.Timeout = 10000;
+                LoggingService.LogHttpRequest("GET", "/login?");
+                string url = $"{VITAP_BASE_URL}/login?";
                 
-                request.AddHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-                request.AddHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-                request.AddHeader("Accept-Language", "en-US,en;q=0.5");
-                request.AddHeader("Cache-Control", "no-cache");
-                request.AddHeader("Pragma", "no-cache");
-                request.AddHeader("Connection", "keep-alive");
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+                request.Headers.Add("Connection", "keep-alive");
+
+                var response = await client.SendAsync(request);
+                string content = await response.Content.ReadAsStringAsync();
                 
-                var response = await client.ExecuteAsync(request);
+                LoggingService.LogHttpResponse((int)response.StatusCode, content.Length);
+
+                // Extract magic token using regex
+                Match match = Regex.Match(content, @"<input type=\"hidden\" name=\"magic\" value=\"([^\"]+)\"");
                 
-                LoggingService.LogHttpResponse((int)response.StatusCode, response.Content?.Length ?? 0);
-                
-                if (!response.IsSuccessful)
+                if (match.Success)
                 {
-                    LoggingService.LogWarning($"HTTP Status: {response.StatusCode}, Error: {response.ErrorMessage}");
+                    return match.Groups[1].Value;
                 }
-                
-                return response.Content ?? string.Empty;
-            }
-            catch (HttpRequestException hexc)
-            {
-                LoggingService.LogError($"Network Error: {hexc.Message}");
-                return null;
-            }
-            catch (TaskCanceledException tcex)
-            {
-                LoggingService.LogError($"Request Timeout: {tcex.Message}");
+
+                LoggingService.LogWarning("Magic token regex pattern not found");
                 return null;
             }
             catch (Exception ex)
             {
-                LoggingService.LogError($"GetLoginPage Exception: {ex.Message}");
+                LoggingService.LogError($"FetchMagicToken Exception: {ex.Message}");
                 return null;
             }
         }
 
-        private async Task<RestResponse> SubmitLoginAsync(string username, string password, string csrfToken)
+        private async Task<bool> SubmitLoginAsync(string username, string password, string magic)
         {
             try
             {
-                LoggingService.LogHttpRequest("POST", "/hotspot/login", $"username={username}&csrf_token={csrfToken}");
-                var request = new RestRequest("/hotspot/login", Method.Post);
-                request.Timeout = 10000;
-                
-                request.AddHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-                request.AddHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-                request.AddHeader("Accept-Language", "en-US,en;q=0.5");
-                request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
-                request.AddHeader("Origin", VITAP_BASE_URL);
-                request.AddHeader("Referer", VITAP_BASE_URL + "/hotspot/login");
-                request.AddHeader("Cache-Control", "no-cache");
-                request.AddHeader("Pragma", "no-cache");
-                request.AddHeader("Connection", "keep-alive");
-                
-                request.AddParameter("username", username);
-                request.AddParameter("password", password);
-                request.AddParameter("csrf_token", csrfToken);
-                
-                var response = await client.ExecuteAsync(request);
-                
-                LoggingService.LogHttpResponse((int)response.StatusCode, response.Content?.Length ?? 0, response.Content);
-                
-                if (!response.IsSuccessful)
+                LoggingService.LogHttpRequest("POST", "/login?");
+                string url = $"{VITAP_BASE_URL}/login?";
+
+                // Build POST data following Python implementation
+                var postData = new Dictionary<string, string>
                 {
-                    LoggingService.LogWarning($"HTTP Status: {response.StatusCode}, Error: {response.ErrorMessage}");
-                }
+                    { "4Tredir", "https://172.18.10.10:1000/login?" },
+                    { "magic", magic },
+                    { "username", username },
+                    { "password", password }
+                };
+
+                var content = new FormUrlEncodedContent(postData);
+                var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
                 
-                return response;
-            }
-            catch (HttpRequestException hexc)
-            {
-                LoggingService.LogError($"Network Error: {hexc.Message}");
-                return new RestResponse { IsSuccessful = false, Content = hexc.Message };
-            }
-            catch (TaskCanceledException tcex)
-            {
-                LoggingService.LogError($"Request Timeout: {tcex.Message}");
-                return new RestResponse { IsSuccessful = false, Content = tcex.Message };
+                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+                request.Headers.Add("Connection", "keep-alive");
+                request.Headers.Add("Referer", url);
+                request.Headers.Add("Origin", VITAP_BASE_URL);
+
+                var response = await client.SendAsync(request);
+                string responseContent = await response.Content.ReadAsStringAsync();
+                
+                LoggingService.LogHttpResponse((int)response.StatusCode, responseContent.Length);
+                
+                // Check for success indicator in response (Python code checks for this URL in response)
+                if (responseContent.Contains("https://172.18.10.10:1000/keepalive?"))
+                {
+                    LoggingService.LogSuccess("Login successful - keepalive URL detected in response");
+                    return true;
+                }
+                else if (responseContent.Contains("concurrent authentication is over limit"))
+                {
+                    LoggingService.LogError("Concurrent login limit reached");
+                    return false;
+                }
+                else
+                {
+                    LoggingService.LogWarning($"Unexpected response content length: {responseContent.Length}");
+                    LoggingService.LogWarning(responseContent.Length > 500 ? responseContent.Substring(0, 500) : responseContent);
+                    return false;
+                }
             }
             catch (Exception ex)
             {
                 LoggingService.LogError($"SubmitLogin Exception: {ex.Message}");
-                return new RestResponse { IsSuccessful = false, Content = ex.Message };
-            }
-        }
-
-        private bool CheckAuthenticationSuccess(RestResponse response)
-        {
-            if (response == null || string.IsNullOrEmpty(response.Content))
-            {
-                LoggingService.LogWarning("Response is null or empty");
                 return false;
-            }
-
-            string content = response.Content.ToLower();
-            bool hasErrorIndicators = content.Contains("invalid") || content.Contains("incorrect") ||
-                                      content.Contains("failed") || content.Contains("error") ||
-                                      content.Contains("unauthorized");
-
-            LoggingService.LogInfo($"Response has error indicators: {hasErrorIndicators}");
-            LoggingService.LogInfo($"HTTP Status Code: {response.StatusCode}");
-
-            return !hasErrorIndicators && response.StatusCode == System.Net.HttpStatusCode.OK;
-        }
-
-        private string ExtractCsrfToken(string htmlContent)
-        {
-            if (string.IsNullOrEmpty(htmlContent))
-                return null;
-
-            try
-            {
-                var patterns = new string[]
-                {
-                    "name=\"csrf_token\"\\s+value=\"([a-zA-Z0-9_-]+)\"",
-                    "name=\"_token\"\\s+value=\"([a-zA-Z0-9_-]+)\"",
-                    "csrf[\"'][\\s:=]+[\"']([a-zA-Z0-9_-]+)[\"']",
-                    "\"csrf_token\"\\s*[:\\=]\\s*\"([a-zA-Z0-9_-]+)\""
-                };
-
-                for (int i = 0; i < patterns.Length; i++)
-                {
-                    var match = Regex.Match(htmlContent, patterns[i], RegexOptions.IgnoreCase);
-                    if (match.Success && match.Groups.Count > 1)
-                    {
-                        LoggingService.LogInfo($"CSRF token found using pattern {i + 1}");
-                        return match.Groups[1].Value;
-                    }
-                }
-
-                LoggingService.LogWarning("No CSRF token pattern matched");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                LoggingService.LogError($"ExtractCSRFToken Exception: {ex.Message}");
-                return null;
-            }
-        }
-
-        private string ExtractErrorMessage(string htmlContent)
-        {
-            if (string.IsNullOrEmpty(htmlContent))
-                return "Unknown error";
-
-            try
-            {
-                var patterns = new string[]
-                {
-                    "<div[^>]*class=\"error[^>]*>([^<]*)</div>",
-                    "<span[^>]*class=\"error[^>]*>([^<]*)</span>",
-                    "<p[^>]*class=\"error[^>]*>([^<]*)</p>",
-                    "error[\"'][\\s:=]+[\"']([^\"']*)[\"']",
-                    "message[\"'][\\s:=]+[\"']([^\"']*)[\"']"
-                };
-
-                foreach (var pattern in patterns)
-                {
-                    var match = Regex.Match(htmlContent, pattern, RegexOptions.IgnoreCase);
-                    if (match.Success && match.Groups.Count > 1)
-                    {
-                        return match.Groups[1].Value.Trim();
-                    }
-                }
-
-                if (htmlContent.ToLower().Contains("invalid") || htmlContent.ToLower().Contains("incorrect"))
-                    return "Invalid credentials";
-                if (htmlContent.ToLower().Contains("error"))
-                    return "Authentication error";
-                return "Login failed";
-            }
-            catch (Exception ex)
-            {
-                LoggingService.LogError($"ExtractError Exception: {ex.Message}");
-                return "Could not extract error message";
             }
         }
     }
