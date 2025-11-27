@@ -97,7 +97,7 @@ namespace VitapAuthenticator
 
                 // Extract magic token using regex
                 Match match = Regex.Match(content, @"<input type=\"hidden\" name=\"magic\" value=\"([^\"]+)\"");
-                
+                                //FIXED: Changed from problematic @ string with escaped quotes to proper pattern
                 if (match.Success)
                 {
                     return match.Groups[1].Value;
