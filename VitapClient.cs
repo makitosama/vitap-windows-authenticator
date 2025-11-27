@@ -11,8 +11,7 @@ namespace VitapAuthenticator
     {
         private const string VITAP_HOST = "172.18.10.10";
         private const int VITAP_PORT = 8090;
-        private const string VITAP_BASE_URL = $"http://{VITAP_HOST}:{VITAP_PORT}";
-
+        private static readonly string VITAP_BASE_URL = "http://" + VITAP_HOST + ":" + VITAP_PORT;
         private static readonly HttpClientHandler handler = new HttpClientHandler
         {
             UseCookies = true,
