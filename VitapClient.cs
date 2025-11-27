@@ -11,10 +11,8 @@ namespace VitapAuthenticator
     public class VitapClient
     {
         // Configuration constants
-        private const string VITAP_HOST = "172.18.10.15";
-        private const int VITAP_PORT = 8080;
-        private static readonly string VITAP_BASE_URL = "http://" + VITAP_HOST + ":" + VITAP_PORT;
-        private static readonly RestClientOptions options = new RestClientOptions(VITAP_BASE_URL)
+private const string VITAP_HOST = "172.18.10.10";        private const int VITAP_PORT = 8080;
+private const int VITAP_PORT = 8090;        private static readonly RestClientOptions options = new RestClientOptions(VITAP_BASE_URL)
         {
             FollowRedirects = true,
             MaxRedirects = 5,
