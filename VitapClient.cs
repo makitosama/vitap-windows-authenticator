@@ -103,7 +103,7 @@ namespace VitapAuthenticator
             {
                 LoggingService.LogHttpRequest("GET", "/hotspot/login");
                 var request = new RestRequest("/hotspot/login", Method.Get);
-                request.Timeout = TimeSpan.FromSeconds(10);
+                request.Timeout = 10000;
                 
                 request.AddHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
                 request.AddHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
@@ -146,7 +146,7 @@ namespace VitapAuthenticator
             {
                 LoggingService.LogHttpRequest("POST", "/hotspot/login", $"username={username}&csrf_token={csrfToken}");
                 var request = new RestRequest("/hotspot/login", Method.Post);
-                request.Timeout = TimeSpan.FromSeconds(10);
+                request.Timeout = 10000;
                 
                 request.AddHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
                 request.AddHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
