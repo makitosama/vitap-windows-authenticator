@@ -21,59 +21,65 @@ namespace VitapAuthenticator
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine("=== VIT-AP Authentication Flow Started ===");
-                System.Diagnostics.Debug.WriteLine($"[VitapClient] Username: {username}");
-                System.Diagnostics.Debug.WriteLine($"[VitapClient] Target: {VITAP_BASE_URL}");
+                LoggingService.Log("=== VIT-AP Authentication Workflow Started ===");
+                LoggingService.LogInfo($"Username: {username}");
+                LoggingService.LogInfo($"Target: {VITAP_BASE_URL}");
+                LoggingService.LogInfo($"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
 
-                // Step 1: Get login page to extract CSRF token
-                System.Diagnostics.Debug.WriteLine("\n[Step 1] Fetching login page...");
+                LoggingService.LogStep(1, "Fetching login page to extract CSRF token...");
                 var loginPageContent = await GetLoginPageContentAsync();
                 if (string.IsNullOrEmpty(loginPageContent))
                 {
-                    System.Diagnostics.Debug.WriteLine("[ERROR] Login page content is empty!");
+                    LoggingService.LogError("FAILED: Login page content is empty!");
                     return false;
                 }
+                LoggingService.LogSuccess($"Login page fetched successfully ({loginPageContent.Length} bytes)");
 
-                System.Diagnostics.Debug.WriteLine($"[Step 1] Login page fetched. Length: {loginPageContent.Length} characters");
-
-                // Step 2: Extract CSRF token
-                System.Diagnostics.Debug.WriteLine("\n[Step 2] Extracting CSRF token...");
+                LoggingService.LogStep(2, "Extracting CSRF token from login page...");
                 var csrfToken = ExtractCsrfToken(loginPageContent);
                 if (string.IsNullOrEmpty(csrfToken))
                 {
-                    System.Diagnostics.Debug.WriteLine("[ERROR] Failed to extract CSRF token!");
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Page content snippet: {loginPageContent.Substring(0, Math.Min(500, loginPageContent.Length))}");
+                    LoggingService.LogError("FAILED: Could not extract CSRF token from response!");
+                    LoggingService.LogWarning($"Page snippet: {loginPageContent.Substring(0, Math.Min(300, loginPageContent.Length))}");
                     return false;
                 }
-                System.Diagnostics.Debug.WriteLine($"[Step 2] CSRF token extracted: {csrfToken}");
+                LoggingService.LogSuccess($"CSRF token extracted: {csrfToken}");
 
-                // Step 3: Submit login
-                System.Diagnostics.Debug.WriteLine("\n[Step 3] Submitting login credentials...");
+                LoggingService.LogStep(3, "Submitting login credentials...");
+                LoggingService.LogInfo($"Parameters: username={username}, csrf_token={csrfToken}");
                 var loginResponse = await SubmitLoginAsync(username, password, csrfToken);
 
-                System.Diagnostics.Debug.WriteLine($"[Step 3] Login response status: {loginResponse.StatusCode}");
-                System.Diagnostics.Debug.WriteLine($"[Step 3] Response length: {(loginResponse.Content?.Length ?? 0)} characters");
+                LoggingService.LogInfo($"HTTP Response Status: {loginResponse.StatusCode}");
+                LoggingService.LogInfo($"Response Size: {(loginResponse.Content?.Length ?? 0)} bytes");
 
-                // Check if response contains success indicators
                 bool isSuccessful = CheckAuthenticationSuccess(loginResponse);
 
                 if (isSuccessful)
                 {
-                    System.Diagnostics.Debug.WriteLine("\n✓ Authentication successful!");
+                    LoggingService.Log("");
+                    LoggingService.LogSuccess("=== AUTHENTICATION SUCCESSFUL ===");
+                    LoggingService.Log("");
                     return true;
                 }
                 else
                 {
                     string errorMsg = ExtractErrorMessage(loginResponse.Content ?? string.Empty);
-                    System.Diagnostics.Debug.WriteLine($"\n✗ Authentication failed: {errorMsg}");
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Response content: {loginResponse.Content}");
+                    LoggingService.Log("");
+                    LoggingService.LogError($"=== AUTHENTICATION FAILED ===");
+                    LoggingService.LogError($"Error: {errorMsg}");
+                    LoggingService.LogWarning($"Response content: {loginResponse.Content}");
+                    LoggingService.Log("");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"\n[EXCEPTION] {ex.GetType().Name}: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[EXCEPTION] StackTrace: {ex.StackTrace}");
+                LoggingService.Log("");
+                LoggingService.LogError($"=== AUTHENTICATION EXCEPTION ===");
+                LoggingService.LogError($"Exception Type: {ex.GetType().Name}");
+                LoggingService.LogError($"Message: {ex.Message}");
+                LoggingService.LogWarning($"StackTrace: {ex.StackTrace}");
+                LoggingService.Log("");
                 return false;
             }
         }
@@ -82,6 +88,7 @@ namespace VitapAuthenticator
         {
             try
             {
+                LoggingService.LogHttpRequest("GET", "/hotspot/login");
                 var request = new RestRequest("/hotspot/login", Method.Get);
                 request.AddHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
                 request.AddHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
@@ -90,12 +97,12 @@ namespace VitapAuthenticator
                 request.AddHeader("Pragma", "no-cache");
 
                 var response = await client.ExecuteAsync(request);
-                System.Diagnostics.Debug.WriteLine($"[GetLoginPage] HTTP Status: {response.StatusCode}");
+                LoggingService.LogHttpResponse((int)response.StatusCode, response.Content?.Length ?? 0);
                 return response.Content;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[GetLoginPage] Error: {ex.Message}");
+                LoggingService.LogError($"GetLoginPage Exception: {ex.Message}");
                 return null;
             }
         }
@@ -104,6 +111,7 @@ namespace VitapAuthenticator
         {
             try
             {
+                LoggingService.LogHttpRequest("POST", "/hotspot/login", $"username={username}&csrf_token={csrfToken}");
                 var request = new RestRequest("/hotspot/login", Method.Post);
                 request.AddHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
                 request.AddHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
@@ -114,22 +122,17 @@ namespace VitapAuthenticator
                 request.AddHeader("Cache-Control", "no-cache");
                 request.AddHeader("Pragma", "no-cache");
 
-                // Add form parameters
                 request.AddParameter("username", username);
                 request.AddParameter("password", password);
                 request.AddParameter("csrf_token", csrfToken);
 
-                System.Diagnostics.Debug.WriteLine($"[SubmitLogin] Sending POST with username={username}, csrf_token={csrfToken}");
-
                 var response = await client.ExecuteAsync(request);
-                System.Diagnostics.Debug.WriteLine($"[SubmitLogin] HTTP Status: {response.StatusCode}");
-                System.Diagnostics.Debug.WriteLine($"[SubmitLogin] Is Success (HTTP): {response.IsSuccessful}");
-
+                LoggingService.LogHttpResponse((int)response.StatusCode, response.Content?.Length ?? 0, response.Content);
                 return response;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SubmitLogin] Error: {ex.Message}");
+                LoggingService.LogError($"SubmitLogin Exception: {ex.Message}");
                 return new RestResponse { IsSuccessful = false, Content = ex.Message };
             }
         }
@@ -137,27 +140,19 @@ namespace VitapAuthenticator
         private bool CheckAuthenticationSuccess(RestResponse response)
         {
             if (response == null || string.IsNullOrEmpty(response.Content))
+            {
+                LoggingService.LogWarning("Response is null or empty");
                 return false;
+            }
 
             string content = response.Content.ToLower();
-
-            // Check for success indicators
-            bool hasSuccessIndicators = content.Contains("success") ||
-                                       content.Contains("authenticated") ||
-                                       content.Contains("welcome") ||
-                                       content.Contains("redirect") ||
-                                       (response.StatusCode == System.Net.HttpStatusCode.OK && !content.Contains("error"));
-
-            // Check for error indicators
-            bool hasErrorIndicators = content.Contains("invalid") ||
-                                     content.Contains("incorrect") ||
-                                     content.Contains("failed") ||
-                                     content.Contains("error") ||
+            bool hasErrorIndicators = content.Contains("invalid") || content.Contains("incorrect") ||
+                                     content.Contains("failed") || content.Contains("error") || 
                                      content.Contains("unauthorized");
 
-            System.Diagnostics.Debug.WriteLine($"[CheckSuccess] Has error indicators: {hasErrorIndicators}");
-            System.Diagnostics.Debug.WriteLine($"[CheckSuccess] HTTP Status: {response.StatusCode}");
-
+            LoggingService.LogInfo($"Response has error indicators: {hasErrorIndicators}");
+            LoggingService.LogInfo($"HTTP Status Code: {response.StatusCode}");
+            
             return !hasErrorIndicators && response.StatusCode == System.Net.HttpStatusCode.OK;
         }
 
@@ -173,25 +168,25 @@ namespace VitapAuthenticator
                     "name=\"csrf_token\"\\s+value=\"([a-zA-Z0-9_-]+)\"",
                     "name=\"_token\"\\s+value=\"([a-zA-Z0-9_-]+)\"",
                     "csrf[\"'][\\s:=]+[\"']([a-zA-Z0-9_-]+)[\"']",
-                    "\"csrf_token\"\\s*[:\=]\\s*\"([a-zA-Z0-9_-]+)\""
+                    "\"csrf_token\"\\s*[:\\=]\\s*\"([a-zA-Z0-9_-]+)\""
                 };
 
-                foreach (var pattern in patterns)
+                for (int i = 0; i < patterns.Length; i++)
                 {
-                    var match = Regex.Match(htmlContent, pattern, RegexOptions.IgnoreCase);
+                    var match = Regex.Match(htmlContent, patterns[i], RegexOptions.IgnoreCase);
                     if (match.Success && match.Groups.Count > 1)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[ExtractCSRF] Token found with pattern: {pattern}");
+                        LoggingService.LogInfo($"CSRF token found using pattern {i + 1}");
                         return match.Groups[1].Value;
                     }
                 }
 
-                System.Diagnostics.Debug.WriteLine("[ExtractCSRF] No CSRF token found with any pattern");
+                LoggingService.LogWarning("No CSRF token pattern matched");
                 return null;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ExtractCSRF] Exception: {ex.Message}");
+                LoggingService.LogError($"ExtractCSRFToken Exception: {ex.Message}");
                 return null;
             }
         }
@@ -221,7 +216,6 @@ namespace VitapAuthenticator
                     }
                 }
 
-                // If no specific error pattern found, return generic message
                 if (htmlContent.ToLower().Contains("invalid") || htmlContent.ToLower().Contains("incorrect"))
                     return "Invalid credentials";
                 if (htmlContent.ToLower().Contains("error"))
@@ -231,7 +225,7 @@ namespace VitapAuthenticator
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ExtractError] Exception: {ex.Message}");
+                LoggingService.LogError($"ExtractError Exception: {ex.Message}");
                 return "Could not extract error message";
             }
         }
