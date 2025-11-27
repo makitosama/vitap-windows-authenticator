@@ -1,0 +1,42 @@
+# Build artifacts
+bin/
+obj/
+.vs/
+*.exe
+*.dll
+*.pdb
+*.o
+*.a
+
+# IDE files
+.vscode/
+.idea/
+*.user
+*.sln.iml
+
+# Dependencies
+packages/
+node_modules/
+
+# Temporary files
+*.tmp
+*.log
+*.cache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# NuGet
+.nuget/
+*.nupkg
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio files
+.vscode
+VitapAuthenticator.csproj.user
